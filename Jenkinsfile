@@ -1,70 +1,113 @@
-pipeline{
+pipeline {
     agent any
-    tools{
-        jdk 'jdk'
-        nodejs 'node17'
+
+    tools {
+        jdk 'jdk'            // JDK configured in Jenkins
+        nodejs 'node17'      // Node.js configured in Jenkins
     }
+
     environment {
-        SCANNER_HOME=tool 'sonar-scanner'
+        SCANNER_HOME = tool 'sonar-scanner'   // SonarQube scanner
     }
+
     stages {
-        stage('clean workspace'){
-            steps{
+        stage('Clean Workspace') {
+            steps {
                 cleanWs()
             }
         }
-        stage('Checkout from Git'){
-            steps{
-                git branch: 'main', credentialsId: 'github-token', url: 'https://github.com/waseem00096/starbucks-production.git'
+
+        stage('Checkout from Git') {
+            steps {
+                git branch: 'main', 
+                    credentialsId: 'github-token', 
+                    url: 'https://github.com/waseem00096/starbucks-production.git'
             }
         }
-        stage("Sonarqube Analysis "){
-            steps{
+
+        stage('SonarQube Analysis') {
+            steps {
                 withSonarQubeEnv('SonarQube') {
-                    sh ''' $SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=starbucks \
-                    -Dsonar.projectKey=starbucks '''
+                    sh """
+                        $SCANNER_HOME/bin/sonar-scanner \
+                        -Dsonar.projectName=starbucks \
+                        -Dsonar.projectKey=starbucks
+                    """
                 }
             }
         }
-        stage("quality gate"){
-           steps {
+
+        stage('Quality Gate') {
+            steps {
                 script {
-                    waitForQualityGate abortPipeline: false, credentialsId: 'Sonar-token' 
+                    waitForQualityGate abortPipeline: false, credentialsId: 'Sonar-token'
                 }
-            } 
+            }
         }
+
         stage('Install Dependencies') {
             steps {
-                sh "npm install"
-            }
-        }        
-        stage('TRIVY FS SCAN') {
-            steps {
-                sh "trivy fs . > trivyfs.txt"
+                sh 'npm install'
             }
         }
-        stage("Docker Build & Push"){
-            steps{
-                script{
-                   withDockerRegistry(credentialsId: 'docker', toolName: 'docker'){   
-                       sh "docker build -t starbucks ."
-                       sh "docker tag starbucks waseem09/starbucks:latest "
-                       sh "docker push waseem09/starbucks:latest "
+
+        stage('TRIVY FS Scan') {
+            steps {
+                sh 'trivy fs . > trivyfs.txt'
+            }
+        }
+
+        stage('Docker Build & Push') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker', toolName: 'docker') {
+                        sh 'docker build -t starbucks .'
+                        sh 'docker tag starbucks waseem09/starbucks:latest'
+                        sh 'docker push waseem09/starbucks:latest'
                     }
                 }
             }
         }
-        stage("TRIVY"){
-            steps{
-                sh "trivy image waseem09/starbucks:latest > trivyimage.txt" 
-            }
-        }
-        stage('App Deploy to Docker container'){
-            steps{
-                sh 'docker run -d --name starbucks -p 4000:4000 waseem09/starbucks:latest'
+
+        stage('TRIVY Image Scan') {
+            steps {
+                sh 'trivy image waseem09/starbucks:latest > trivyimage.txt'
             }
         }
 
+        stage('App Deploy to Docker Container') {
+            steps {
+                script {
+                    // Remove old container if exists
+                    sh 'docker rm -f starbucks || true'
+
+                    // Run container and let Docker pick free host port
+                    def containerId = sh(
+                        script: "docker run -d -P --name starbucks waseem09/starbucks:latest",
+                        returnStdout: true
+                    ).trim()
+
+                    // Get dynamically assigned host port for container's 4000
+                    def hostPort = sh(
+                        script: "docker port ${containerId} 4000 | cut -d':' -f2",
+                        returnStdout: true
+                    ).trim()
+
+                    echo "Starbucks app is running on host port: ${hostPort}"
+                }
+            }
+        }
     }
-    
+
+    post {
+        always {
+            echo 'Pipeline finished!'
+        }
+        success {
+            echo 'Pipeline completed successfully!'
+        }
+        failure {
+            echo 'Pipeline failed!'
+        }
+    }
 }
