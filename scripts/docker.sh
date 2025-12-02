@@ -8,7 +8,8 @@ sudo apt-get update -y
 sudo apt-get install docker.io -y
 
 # Add the 'ubuntu' and 'jenkins' users to the 'docker' group to allow running Docker without sudo
-sudo usermod -aG docker ubuntu 
+
+sudo usermod -aG docker $USER
 sudo usermod -aG docker jenkins 
 
 # Apply the new group settings immediately
