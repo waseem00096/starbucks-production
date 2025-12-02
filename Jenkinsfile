@@ -77,25 +77,18 @@ pipeline {
 
         stage('App Deploy to Docker Container') {
             steps {
-                script {
-                    // Remove old container if exists
-                    sh 'docker rm -f starbucks || true'
+                sh '''
+        # Stop container if already running (ignore errors)
+        docker stop starbucks || true
 
-                    // Run container and let Docker pick free host port
-                    def containerId = sh(
-                        script: "docker run -d -P --name starbucks waseem09/starbucks:latest",
-                        returnStdout: true
-                    ).trim()
+        # Remove old container (ignore errors)
+        docker rm starbucks || true
 
-                    // Get dynamically assigned host port for container's 4000
-                    def hostPort = sh(
-                        script: "docker port ${containerId} 4000 | cut -d':' -f2",
-                        returnStdout: true
-                    ).trim()
-
-                    echo "Starbucks app is running on host port: ${hostPort}"
-                }
-            }
+        # Run a fresh container
+        docker run -d --name starbucks -p 3000:3000 waseem09/starbucks:latest
+        '''
+    }
+}            }
         }
     }
 
