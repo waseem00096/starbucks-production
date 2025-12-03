@@ -81,11 +81,12 @@ pipeline {
            steps {
             withEnv(["KUBECONFIG=${KUBE_CONFIG}"]) {
                  sh """
-                # Update the manifest with the latest image tag
-                 sed -i 's|image: .*|image: ${IMAGE_NAME}:${IMAGE_TAG}|' kubernetes/manifest.yml
+                      kubectl get nodes
+                    # Update the manifest with the latest image tag
+                      sed -i 's|image: .*|image: ${IMAGE_NAME}:${IMAGE_TAG}|' kubernetes/manifest.yml
             
-                 # Apply the manifest to Kubernetes
-                 kubectl apply -f  kubernetes/manifest.yml
+                     # Apply the manifest to Kubernetes
+                       kubectl apply -f  kubernetes/manifest.yml
                  """
         }
     }
