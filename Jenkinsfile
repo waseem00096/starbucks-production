@@ -82,10 +82,10 @@ pipeline {
             withEnv(["KUBECONFIG=${KUBE_CONFIG}"]) {
                  sh """
                 # Update the manifest with the latest image tag
-                 sed -i 's|image: .*|image: ${IMAGE_NAME}:${IMAGE_TAG}|' starbucks-production/kubernetes/manifest.yml
+                 sed -i 's|image: .*|image: ${IMAGE_NAME}:${IMAGE_TAG}|' kubernetes/manifest.yml
             
                  # Apply the manifest to Kubernetes
-                 kubectl apply -f starbucks-production/kubernetes/manifest.yml
+                 kubectl apply -f  kubernetes/manifest.yml
                  """
         }
     }
