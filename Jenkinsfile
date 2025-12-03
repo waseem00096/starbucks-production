@@ -86,7 +86,7 @@ pipeline {
                     sed -i 's|image: .*|image: ${IMAGE_NAME}:${IMAGE_TAG}|' k8s/deployment.yaml
                     
                     # Apply to Kubernetes
-                    kubectl apply -f k8s/deployment.yaml
+                    kubectl apply -f kubernetes/manifest.yml
                     """
                 }
             }
