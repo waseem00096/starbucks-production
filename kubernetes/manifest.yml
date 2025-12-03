@@ -1,4 +1,3 @@
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -17,7 +16,7 @@ spec:
     spec:
       containers:
       - name: starbucks-container
-        image: aseemakram19/starbucks
+        image: waseem09/starbucks:latest
         ports:
         - containerPort: 3000
 ---
@@ -26,9 +25,11 @@ kind: Service
 metadata:
   name: starbucks-service
 spec:
-  type: LoadBalancer
+  type: NodePort
   selector:
     app: starbucks
   ports:
   - port: 80
     targetPort: 3000
+    nodePort: 30001
+
