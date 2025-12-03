@@ -8,6 +8,9 @@ pipeline {
 
     environment {
         SCANNER_HOME = tool 'sonar-scanner'   // SonarQube scanner
+        KUBE_CONFIG = '/var/lib/jenkins/.kube/config'
+        IMAGE_NAME = 'waseem09/starbucks'
+        IMAGE_TAG = 'latest'
     }
 
     stages {
@@ -61,9 +64,8 @@ pipeline {
             steps {
                 script {
                     withDockerRegistry(credentialsId: 'docker', toolName: 'docker') {
-                        sh 'docker build -t starbucks .'
-                        sh 'docker tag starbucks waseem09/starbucks:latest'
-                        sh 'docker push waseem09/starbucks:latest'
+                        sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+                        sh "docker push ${IMAGE_NAME}:${IMAGE_TAG}"
                     }
                 }
             }
@@ -71,24 +73,23 @@ pipeline {
 
         stage('TRIVY Image Scan') {
             steps {
-                sh 'trivy image waseem09/starbucks:latest > trivyimage.txt'
+                sh "trivy image ${IMAGE_NAME}:${IMAGE_TAG} > trivyimage.txt"
             }
         }
 
-        stage('App Deploy to Docker Container') {
+        stage('Deploy to Kubernetes') {
             steps {
-                sh '''
-        # Stop container if already running (ignore errors)
-        docker stop starbucks || true
-
-        # Remove old container (ignore errors)
-        docker rm starbucks || true
-
-        # Run a fresh container
-        docker run -d --name starbucks -p 3000:3000 waseem09/starbucks:latest
-        '''
-    }
-}            }
+                withEnv(["KUBECONFIG=${KUBE_CONFIG}"]) {
+                    // Apply the deployment/service manifest
+                    sh """
+                    # Update the manifest with the latest image tag
+                    sed -i 's|image: .*|image: ${IMAGE_NAME}:${IMAGE_TAG}|' k8s/deployment.yaml
+                    
+                    # Apply to Kubernetes
+                    kubectl apply -f k8s/deployment.yaml
+                    """
+                }
+            }
         }
     }
 
