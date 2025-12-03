@@ -78,19 +78,18 @@ pipeline {
         }
 
         stage('Deploy to Kubernetes') {
-            steps {
-                withEnv(["KUBECONFIG=${KUBE_CONFIG}"]) {
-                    // Apply the deployment/service manifest
-                    sh """
-                    # Update the manifest with the latest image tag
-                    sed -i 's|image: .*|image: ${IMAGE_NAME}:${IMAGE_TAG}|' k8s/deployment.yaml
-                    
-                    # Apply to Kubernetes
-                    kubectl apply -f kubernetes/manifest.yml
-                    """
-                }
-            }
+           steps {
+            withEnv(["KUBECONFIG=${KUBE_CONFIG}"]) {
+                 sh """
+                # Update the manifest with the latest image tag
+                 sed -i 's|image: .*|image: ${IMAGE_NAME}:${IMAGE_TAG}|' starbucks-production/kubernetes/manifest.yml
+            
+                 # Apply the manifest to Kubernetes
+                 kubectl apply -f starbucks-production/kubernetes/manifest.yml
+                 """
         }
+    }
+}
     }
 
     post {
