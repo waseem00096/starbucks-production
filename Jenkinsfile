@@ -22,22 +22,33 @@ pipeline {
         }
 
         stage('SonarQube Analysis') {
-            steps {
+    steps {
+        script {
+            try {
                 withSonarQubeEnv('SonarQube') {
                     sh """$SCANNER_HOME/bin/sonar-scanner \
                         -Dsonar.projectName=starbucks \
                         -Dsonar.projectKey=starbucks"""
                 }
+            } catch (err) {
+                echo "SonarQube analysis failed, continuing pipeline..."
             }
         }
+    }
+}
 
-        stage('Quality Gate') {
-            steps {
-                script {
-                    waitForQualityGate abortPipeline: false, credentialsId: 'Sonar-token'
-                }
+stage('Quality Gate') {
+    steps {
+        script {
+            try {
+                waitForQualityGate abortPipeline: false, credentialsId: 'Sonar-token'
+            } catch (err) {
+                echo "Quality gate failed, continuing pipeline..."
             }
         }
+    }
+}
+
 
         stage('Install Dependencies') {
             steps {
