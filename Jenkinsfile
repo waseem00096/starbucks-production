@@ -40,13 +40,15 @@ pipeline {
             }
         }
 
-        stage("quality gate"){
-           steps {
-                script {
-                    waitForQualityGate abortPipeline: false, credentialsId: 'Sonar-token' 
-                }
-            } 
+        stage("Quality Gate") {
+    steps {
+        script {
+            def qg = waitForQualityGate abortPipeline: false, credentialsId: 'Sonar-token'
+            echo "SonarQube Quality Gate status: ${qg.status}"
         }
+    }
+}
+
 
         stage('Install Dependencies') {
             steps {
