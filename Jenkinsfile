@@ -22,33 +22,32 @@ pipeline {
         }
 
         stage('SonarQube Analysis') {
-    steps {
-        script {
-            try {
-                withSonarQubeEnv('SonarQube') {
-                    sh """$SCANNER_HOME/bin/sonar-scanner \
-                        -Dsonar.projectName=starbucks \
-                        -Dsonar.projectKey=starbucks"""
+            steps {
+                script {
+                    try {
+                        withSonarQubeEnv('SonarQube') {
+                            sh """$SCANNER_HOME/bin/sonar-scanner \
+                                -Dsonar.projectName=starbucks \
+                                -Dsonar.projectKey=starbucks"""
+                        }
+                    } catch (err) {
+                        echo "SonarQube analysis failed, continuing pipeline..."
+                    }
                 }
-            } catch (err) {
-                echo "SonarQube analysis failed, continuing pipeline..."
             }
         }
-    }
-}
 
-stage('Quality Gate') {
-    steps {
-        script {
-            try {
-                waitForQualityGate abortPipeline: false, credentialsId: 'Sonar-token'
-            } catch (err) {
-                echo "Quality gate failed, continuing pipeline..."
+        stage('Quality Gate') {
+            steps {
+                script {
+                    try {
+                        waitForQualityGate abortPipeline: false, credentialsId: 'Sonar-token'
+                    } catch (err) {
+                        echo "Quality gate failed, continuing pipeline..."
+                    }
+                }
             }
         }
-    }
-}
-
 
         stage('Install Dependencies') {
             steps {
@@ -80,19 +79,27 @@ stage('Quality Gate') {
             }
         }
 
-       stage('Deploy to Local Cluster') {
-    steps {
-        dir('kubernetes') {
-            script {
-                sh '''
-                export KUBECONFIG=/var/lib/jenkins/.kube/config
-                echo "Using kubeconfig: $KUBECONFIG"
-                kubectl cluster-info
-                kubectl apply -f kubernetes/manifest.yml
-                kubectl get pods
-                kubectl get svc
-                '''
+        stage('Deploy to Local Cluster') {
+            steps {
+                dir('kubernetes') {
+                    script {
+                        sh '''
+                        export KUBECONFIG=/var/lib/jenkins/.kube/config
+                        echo "Using kubeconfig: $KUBECONFIG"
+
+                        echo "Verifying cluster access..."
+                        kubectl cluster-info
+
+                        echo "Deploying application..."
+                        kubectl apply -f manifest.yml
+
+                        echo "Verifying deployment..."
+                        kubectl get pods
+                        kubectl get svc
+                        '''
+                    }
+                }
             }
         }
-    }
-}
+    } // end of stages
+} // end of pipeline
