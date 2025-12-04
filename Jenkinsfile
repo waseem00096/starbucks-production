@@ -17,7 +17,7 @@ pipeline {
 
         stage('Checkout from Git') {
             steps {
-                git branch: 'main', credentialsId: 'github-token', url: 'https://github.com/Aseemakram19/starbucks-kubernetes.git'
+                git branch: 'main', credentialsId: 'github-token', url: 'https://github.com/waseem00096/starbucks-production.git'
             }
         }
 
@@ -56,8 +56,8 @@ pipeline {
                 script {
                     withDockerRegistry(credentialsId: 'docker', toolName: 'docker') {
                         sh 'docker build -t starbucks .'
-                        sh 'docker tag starbucks aseemakram19/starbucks:latest'
-                        sh 'docker push aseemakram19/starbucks:latest'
+                        sh 'docker tag starbucks waseem09/starbucks:latest'
+                        sh 'docker push waseem09/starbucks:latest'
                     }
                 }
             }
@@ -65,7 +65,7 @@ pipeline {
 
         stage('TRIVY Image Scan') {
             steps {
-                sh 'trivy image aseemakram19/starbucks:latest > trivyimage.txt'
+                sh 'trivy image waseem09/starbucks:latest > trivyimage.txt'
             }
         }
 
