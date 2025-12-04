@@ -8,98 +8,70 @@ pipeline {
         SCANNER_HOME = tool 'sonar-scanner'
     }
     stages {
-
         stage('Clean Workspace') {
-            steps {
-                cleanWs()
-            }
+            steps { cleanWs() }
         }
 
-        stage('Checkout from Git') {
-            steps {
-                git branch: 'main', credentialsId: 'github-token', url: 'https://github.com/waseem00096/starbucks-production.git'
-            }
+        stage('Checkout Code') {
+            steps { git branch: 'main', credentialsId: 'github-token', url: 'YOUR_GIT_REPO' }
         }
 
         stage('SonarQube Analysis') {
             steps {
-                script {
-                    try {
-                        withSonarQubeEnv('SonarQube') {
-                            sh """$SCANNER_HOME/bin/sonar-scanner \
-                                -Dsonar.projectName=starbucks \
-                                -Dsonar.projectKey=starbucks"""
-                        }
-                    } catch (err) {
-                        echo "SonarQube analysis failed, continuing pipeline..."
-                    }
+                withSonarQubeEnv('SonarQube') {
+                    sh "$SCANNER_HOME/bin/sonar-scanner -Dsonar.projectKey=starbucks -Dsonar.projectName=starbucks"
                 }
             }
         }
 
         stage('Quality Gate') {
-            steps {
-                script {
-                    try {
-                        waitForQualityGate abortPipeline: false, credentialsId: 'Sonar-token'
-                    } catch (err) {
-                        echo "Quality gate failed, continuing pipeline..."
-                    }
-                }
-            }
+            steps { waitForQualityGate abortPipeline: true }
         }
 
         stage('Install Dependencies') {
-            steps {
-                sh 'npm install'
-            }
+            steps { sh 'npm install' }
         }
 
-        stage('TRIVY FS Scan') {
-            steps {
-                sh 'trivy fs . > trivyfs.txt'
-            }
+        stage('Trivy FS Scan') {
+            steps { sh 'trivy fs . > trivyfs.txt' }
         }
 
         stage('Docker Build & Push') {
             steps {
                 script {
                     withDockerRegistry(credentialsId: 'docker', toolName: 'docker') {
-                        sh 'docker build -t starbucks .'
-                        sh 'docker tag starbucks waseem09/starbucks:latest'
+                        sh 'docker build -t waseem09/starbucks:latest .'
                         sh 'docker push waseem09/starbucks:latest'
                     }
                 }
             }
         }
 
-        stage('TRIVY Image Scan') {
-            steps {
-                sh 'trivy image waseem09/starbucks:latest > trivyimage.txt'
-            }
+        stage('Trivy Image Scan') {
+            steps { sh 'trivy image waseem09/starbucks:latest > trivyimage.txt' }
         }
 
-        stage('Deploy to Local Cluster') {
+        stage('Deploy to Kubernetes') {
             steps {
                 dir('kubernetes') {
                     script {
                         sh '''
                         export KUBECONFIG=/var/lib/jenkins/.kube/config
-                        echo "Using kubeconfig: $KUBECONFIG"
-
-                        echo "Verifying cluster access..."
-                        kubectl cluster-info
-
-                        echo "Deploying application..."
-                        kubectl apply -f kubernetes/manifest.yml
-
-                        echo "Verifying deployment..."
-                        kubectl get pods
-                        kubectl get svc
+                        kubectl apply -f manifest.yml
+                        kubectl rollout status deployment/starbucks-deployment
                         '''
                     }
                 }
             }
         }
-    } // end of stages
-} // end of pipeline
+    }
+    post {
+        always {
+            emailext (
+                subject: "Pipeline ${currentBuild.currentResult}: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: "Check pipeline logs at ${env.BUILD_URL}",
+                to: "your-email@example.com"
+            )
+        }
+    }
+}
