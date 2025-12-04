@@ -13,11 +13,6 @@ pipeline {
         IMAGE_TAG = 'latest'
     }
 
-    options {
-        ansiColor('xterm')
-        timestamps()
-        timeout(time: 60, unit: 'MINUTES')
-    }
 
     stages {
 
