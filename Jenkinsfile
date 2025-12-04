@@ -82,13 +82,13 @@ pipeline {
         }
 
        stage('Deploy to Kubernetes') {
-    steps {
-        withEnv(["KUBECONFIG=${KUBE_CONFIG}"]) {
-            sh """
-                sed -i 's|image: .*|image: ${IMAGE_NAME}:${IMAGE_TAG}|' kubernetes/manifest.yml
-                kubectl apply -f kubernetes/manifest.yml --validate=false
-                kubectl rollout status deployment/starbucks
-            """
+         steps {
+           withEnv(["KUBECONFIG=${KUBE_CONFIG}"]) {
+              sh """
+                  sed -i 's|image: .*|image: ${IMAGE_NAME}:${IMAGE_TAG}|' kubernetes/manifest.yml
+                  kubectl apply -f kubernetes/manifest.yml --validate=false
+                  kubectl rollout status deployment/starbucks
+               """
         }
     }
 }
