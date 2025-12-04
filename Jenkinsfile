@@ -1,19 +1,14 @@
 pipeline {
     agent any
-
     tools {
-        jdk 'jdk-21'            // JDK configured in Jenkins
-        nodejs 'node17'      // Node.js configured in Jenkins
+        jdk 'jdk'
+        nodejs 'node17'
     }
-
     environment {
-        SCANNER_HOME = tool 'sonar-scanner'   // SonarQube scanner
-        KUBE_CONFIG = '/var/lib/jenkins/.kube/config'
-        IMAGE_NAME = 'waseem09/starbucks'
-        IMAGE_TAG = 'latest'
+        SCANNER_HOME = tool 'sonar-scanner'
     }
-
     stages {
+
         stage('Clean Workspace') {
             steps {
                 cleanWs()
@@ -22,20 +17,16 @@ pipeline {
 
         stage('Checkout from Git') {
             steps {
-                git branch: 'main', 
-                    credentialsId: 'github-token', 
-                    url: 'https://github.com/waseem00096/starbucks-production.git'
+                git branch: 'main', credentialsId: 'github-token', url: 'https://github.com/Aseemakram19/starbucks-kubernetes.git'
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('SonarQube') {
-                    sh """
-                        $SCANNER_HOME/bin/sonar-scanner \
+                    sh """$SCANNER_HOME/bin/sonar-scanner \
                         -Dsonar.projectName=starbucks \
-                        -Dsonar.projectKey=starbucks
-                    """
+                        -Dsonar.projectKey=starbucks"""
                 }
             }
         }
@@ -64,8 +55,9 @@ pipeline {
             steps {
                 script {
                     withDockerRegistry(credentialsId: 'docker', toolName: 'docker') {
-                        sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
-                        sh "docker push ${IMAGE_NAME}:${IMAGE_TAG}"
+                        sh 'docker build -t starbucks .'
+                        sh 'docker tag starbucks aseemakram19/starbucks:latest'
+                        sh 'docker push aseemakram19/starbucks:latest'
                     }
                 }
             }
@@ -73,35 +65,31 @@ pipeline {
 
         stage('TRIVY Image Scan') {
             steps {
-                sh "trivy image ${IMAGE_NAME}:${IMAGE_TAG} > trivyimage.txt"
+                sh 'trivy image aseemakram19/starbucks:latest > trivyimage.txt'
             }
         }
 
-        stage('Deploy to Kubernetes') {
+        stage('Deploy to Local Cluster') {
             steps {
-                withEnv(["KUBECONFIG=${KUBE_CONFIG}"]) {
-                    // Apply the deployment/service manifest
-                    sh """
-                    # Update the manifest with the latest image tag
-                    sed -i 's|image: .*|image: ${IMAGE_NAME}:${IMAGE_TAG}|' k8s/deployment.yaml
-                    
-                    # Apply to Kubernetes
-                    kubectl apply -f k8s/deployment.yaml
-                    """
+                dir('kubernetes') {
+                    withCredentials([file(credentialsId: 'local-kubeconfig', variable: 'KUBECONFIG')]) {
+                        script {
+                            sh '''
+                            echo "Using kubeconfig: $KUBECONFIG"
+                            echo "Verifying cluster access..."
+                            kubectl cluster-info
+
+                            echo "Deploying application..."
+                            kubectl apply -f manifest.yml
+
+                            echo "Verifying deployment..."
+                            kubectl get pods
+                            kubectl get svc
+                            '''
+                        }
+                    }
                 }
             }
-        }
-    }
-
-    post {
-        always {
-            echo 'Pipeline finished!'
-        }
-        success {
-            echo 'Pipeline completed successfully!'
-        }
-        failure {
-            echo 'Pipeline failed!'
         }
     }
 }
