@@ -3,11 +3,14 @@ pipeline {
 
     tools {
         jdk 'jdk-21'            // JDK configured in Jenkins
-        nodejs 'node17'      // Node.js configured in Jenkins
+        nodejs 'node17'         // Node.js configured in Jenkins
     }
 
     environment {
         SCANNER_HOME = tool 'sonar-scanner'   // SonarQube scanner
+        KUBE_CONFIG = '/var/lib/jenkins/.kube/config'
+        IMAGE_NAME = 'waseem09/starbucks'
+        IMAGE_TAG = 'latest'
     }
 
     stages {
@@ -61,9 +64,8 @@ pipeline {
             steps {
                 script {
                     withDockerRegistry(credentialsId: 'docker', toolName: 'docker') {
-                        sh 'docker build -t starbucks .'
-                        sh 'docker tag starbucks waseem09/starbucks:latest'
-                        sh 'docker push waseem09/starbucks:latest'
+                        sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+                        sh "docker push ${IMAGE_NAME}:${IMAGE_TAG}"
                     }
                 }
             }
@@ -71,29 +73,22 @@ pipeline {
 
         stage('TRIVY Image Scan') {
             steps {
-                sh 'trivy image waseem09/starbucks:latest > trivyimage.txt'
+                sh "trivy image ${IMAGE_NAME}:${IMAGE_TAG} > trivyimage.txt"
             }
         }
 
-        stage('App Deploy to Docker Container') {
+        stage('Deploy to Kubernetes') {
             steps {
-                script {
-                    // Remove old container if exists
-                    sh 'docker rm -f starbucks || true'
+                withEnv(["KUBECONFIG=${KUBE_CONFIG}"]) {
+                    dir('starbucks-production') {
+                        sh """
+                        # Update manifest with the latest image tag
+                        sed -i 's|image: .*|image: ${IMAGE_NAME}:${IMAGE_TAG}|' kubernetes/manifest.yml
 
-                    // Run container and let Docker pick free host port
-                    def containerId = sh(
-                        script: "docker run -d -P --name starbucks waseem09/starbucks:latest",
-                        returnStdout: true
-                    ).trim()
-
-                    // Get dynamically assigned host port for container's 4000
-                    def hostPort = sh(
-                        script: "docker port ${containerId} 4000 | cut -d':' -f2",
-                        returnStdout: true
-                    ).trim()
-
-                    echo "Starbucks app is running on host port: ${hostPort}"
+                        # Apply manifest to Kubernetes
+                        kubectl apply -f kubernetes/manifest.yml --validate=false
+                        """
+                    }
                 }
             }
         }
