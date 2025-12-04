@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     tools {
-        jdk 'jdk'            // JDK configured in Jenkins
+        jdk 'jdk-21'            // JDK configured in Jenkins
         nodejs 'node17'      // Node.js configured in Jenkins
     }
 
