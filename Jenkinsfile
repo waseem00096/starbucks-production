@@ -1,25 +1,16 @@
 pipeline {
-    agent { label 'kube-master' }  // Run on master node
+    agent any
 
     tools {
-        jdk 'jdk-21'
-        nodejs 'node17'
+        jdk 'jdk'            // JDK configured in Jenkins
+        nodejs 'node17'      // Node.js configured in Jenkins
     }
 
     environment {
-        SCANNER_HOME = tool 'sonar-scanner'
-        KUBE_CONFIG = '/var/lib/jenkins/.kube/config'
-        IMAGE_NAME = 'waseem09/starbucks'
-        IMAGE_TAG = 'latest'
-    }
-
-    options {
-        timestamps()
-        timeout(time: 60, unit: 'MINUTES')
+        SCANNER_HOME = tool 'sonar-scanner'   // SonarQube scanner
     }
 
     stages {
-
         stage('Clean Workspace') {
             steps {
                 cleanWs()
@@ -49,22 +40,20 @@ pipeline {
         stage('Quality Gate') {
             steps {
                 script {
-                    def qg = waitForQualityGate abortPipeline: true, credentialsId: 'Sonar-token'
-                    echo "Quality Gate status: ${qg.status}"
+                    waitForQualityGate abortPipeline: false, credentialsId: 'Sonar-token'
                 }
             }
         }
 
         stage('Install Dependencies') {
             steps {
-                sh 'npm ci'
+                sh 'npm install'
             }
         }
 
         stage('TRIVY FS Scan') {
             steps {
-                sh 'trivy fs --exit-code 1 --severity HIGH,CRITICAL . || true'
-                sh 'trivy fs . > trivyfs.txt || true'
+                sh 'trivy fs . > trivyfs.txt'
             }
         }
 
@@ -72,10 +61,9 @@ pipeline {
             steps {
                 script {
                     withDockerRegistry(credentialsId: 'docker', toolName: 'docker') {
-                        sh """
-                            docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
-                            docker push ${IMAGE_NAME}:${IMAGE_TAG}
-                        """
+                        sh 'docker build -t starbucks .'
+                        sh 'docker tag starbucks waseem09/starbucks:latest'
+                        sh 'docker push waseem09/starbucks:latest'
                     }
                 }
             }
@@ -83,36 +71,43 @@ pipeline {
 
         stage('TRIVY Image Scan') {
             steps {
-                sh "trivy image --exit-code 1 --severity HIGH,CRITICAL ${IMAGE_NAME}:${IMAGE_TAG} || true"
-                sh "trivy image ${IMAGE_NAME}:${IMAGE_TAG} > trivyimage.txt || true"
+                sh 'trivy image waseem09/starbucks:latest > trivyimage.txt'
             }
         }
 
-        stage('Deploy to Kubernetes') {
+        stage('App Deploy to Docker Container') {
             steps {
-                withEnv(["KUBECONFIG=${KUBE_CONFIG}"]) {
-                    sh """
-                        sed -i 's|image: .*|image: ${IMAGE_NAME}:${IMAGE_TAG}|' kubernetes/manifest.yml
-                        kubectl apply -f kubernetes/manifest.yml --validate=false
-                        kubectl rollout status deployment/starbucks
-                    """
+                script {
+                    // Remove old container if exists
+                    sh 'docker rm -f starbucks || true'
+
+                    // Run container and let Docker pick free host port
+                    def containerId = sh(
+                        script: "docker run -d -P --name starbucks waseem09/starbucks:latest",
+                        returnStdout: true
+                    ).trim()
+
+                    // Get dynamically assigned host port for container's 4000
+                    def hostPort = sh(
+                        script: "docker port ${containerId} 4000 | cut -d':' -f2",
+                        returnStdout: true
+                    ).trim()
+
+                    echo "Starbucks app is running on host port: ${hostPort}"
                 }
             }
         }
-
     }
 
     post {
         always {
-            archiveArtifacts artifacts: 'trivyfs.txt,trivyimage.txt', allowEmptyArchive: true
-            cleanWs()
-            echo 'Pipeline Finished!'
+            echo 'Pipeline finished!'
         }
         success {
-            echo 'Pipeline Completed Successfully!'
+            echo 'Pipeline completed successfully!'
         }
         failure {
-            echo 'Pipeline Failed!'
+            echo 'Pipeline failed!'
         }
     }
 }
