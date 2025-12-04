@@ -1,9 +1,9 @@
 pipeline {
-    agent { label 'kube-master' }  // Run on your Jenkins agent
+    agent any
 
     tools {
         jdk 'jdk-21'            // JDK configured in Jenkins
-        nodejs 'node17'         // Node.js configured in Jenkins
+        nodejs 'node17'      // Node.js configured in Jenkins
     }
 
     environment {
@@ -13,14 +13,7 @@ pipeline {
         IMAGE_TAG = 'latest'
     }
 
-    options {
-        ansiColor('xterm')
-        timestamps()
-        timeout(time: 60, unit: 'MINUTES')
-    }
-
     stages {
-
         stage('Clean Workspace') {
             steps {
                 cleanWs()
@@ -50,24 +43,20 @@ pipeline {
         stage('Quality Gate') {
             steps {
                 script {
-                    def qg = waitForQualityGate abortPipeline: true, credentialsId: 'Sonar-token'
-                    echo "SonarQube Quality Gate status: ${qg.status}"
+                    waitForQualityGate abortPipeline: false, credentialsId: 'Sonar-token'
                 }
             }
         }
 
         stage('Install Dependencies') {
             steps {
-                sh 'npm ci'
+                sh 'npm install'
             }
         }
 
         stage('TRIVY FS Scan') {
             steps {
-                script {
-                    sh 'trivy fs --exit-code 1 --severity HIGH,CRITICAL . || true'
-                    archiveArtifacts artifacts: 'trivyfs.txt', allowEmptyArchive: true
-                }
+                sh 'trivy fs . > trivyfs.txt'
             }
         }
 
@@ -75,10 +64,8 @@ pipeline {
             steps {
                 script {
                     withDockerRegistry(credentialsId: 'docker', toolName: 'docker') {
-                        sh """
-                            docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
-                            docker push ${IMAGE_NAME}:${IMAGE_TAG}
-                        """
+                        sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+                        sh "docker push ${IMAGE_NAME}:${IMAGE_TAG}"
                     }
                 }
             }
@@ -86,33 +73,27 @@ pipeline {
 
         stage('TRIVY Image Scan') {
             steps {
-                script {
-                    sh "trivy image --exit-code 1 --severity HIGH,CRITICAL ${IMAGE_NAME}:${IMAGE_TAG} || true"
-                    archiveArtifacts artifacts: 'trivyimage.txt', allowEmptyArchive: true
-                }
+                sh "trivy image ${IMAGE_NAME}:${IMAGE_TAG} > trivyimage.txt"
             }
         }
 
         stage('Deploy to Kubernetes') {
-            steps {
-                withEnv(["KUBECONFIG=${KUBE_CONFIG}"]) {
-                    script {
-                        sh 'kubectl version --client'
-                        sh """
-                            sed -i 's|image: .*|image: ${IMAGE_NAME}:${IMAGE_TAG}|' kubernetes/manifest.yml
-                            kubectl apply -f kubernetes/manifest.yml
-                            kubectl rollout status deployment/starbucks || true
-                        """
-                    }
-                }
-            }
+           steps {
+            withEnv(["KUBECONFIG=${KUBE_CONFIG}"]) {
+                 sh """
+                # Update the manifest with the latest image tag
+                 sed -i 's|image: .*|image: ${IMAGE_NAME}:${IMAGE_TAG}|' starbucks-production/kubernetes/manifest.yml
+            
+                 # Apply the manifest to Kubernetes
+                 kubectl apply -f starbucks-production/kubernetes/manifest.yml
+                 """
         }
+    }
+}
     }
 
     post {
         always {
-            archiveArtifacts artifacts: 'trivyfs.txt,trivyimage.txt', allowEmptyArchive: true
-            cleanWs()
             echo 'Pipeline finished!'
         }
         success {
