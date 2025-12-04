@@ -80,27 +80,23 @@ stage('Quality Gate') {
             }
         }
 
-        stage('Deploy to Local Cluster') {
-            steps {
-                dir('kubernetes') {
-                    withCredentials([file(credentialsId: 'local-kubeconfig', variable: 'KUBECONFIG')]) {
-                        script {
-                            sh '''
-                            echo "Using kubeconfig: $KUBECONFIG"
-                            echo "Verifying cluster access..."
-                            kubectl cluster-info
-
-                            echo "Deploying application..."
-                            kubectl apply -f manifest.yml
-
-                            echo "Verifying deployment..."
-                            kubectl get pods
-                            kubectl get svc
-                            '''
-                        }
-                    }
-                }
+       stage('Deploy to Local Cluster') {
+    steps {
+        dir('kubernetes') {
+            script {
+                sh '''
+                export KUBECONFIG=/var/lib/jenkins/.kube/config
+                echo "Using kubeconfig: $KUBECONFIG"
+                kubectl cluster-info
+                kubectl apply -f kubernetes/manifest.yml
+                kubectl get pods
+                kubectl get svc
+                '''
             }
+        }
+    }
+}
+
         }
     }
 }
