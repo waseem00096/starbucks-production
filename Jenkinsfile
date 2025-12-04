@@ -91,7 +91,7 @@ pipeline {
                         kubectl cluster-info
 
                         echo "Deploying application..."
-                        kubectl apply -f manifest.yml
+                        kubectl apply -f kubernetes/manifest.yml
 
                         echo "Verifying deployment..."
                         kubectl get pods
